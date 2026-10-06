@@ -20,6 +20,10 @@ import csv
 import html
 import re
 from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
+
+UK_TZ = ZoneInfo("Europe/London")  # always show the time in UK local time,
+                                   # whatever timezone the build machine uses
 
 import console_utf8  # noqa: F401  (force UTF-8 console output on Windows)
 from lads_client import LadsClient, detect_country, parse_event_name
@@ -138,14 +142,14 @@ def scan(countries, target_day, workers):
 def build_html(hits, countries, day_label):
     """Return the full index.html string."""
     esc = html.escape
-    generated = datetime.now().strftime("%A %d %B %Y, %H:%M")
-    rows = ""
-    for h in hits:
+    now_uk = datetime.now(UK_TZ)
+    # e.g. "Tuesday 06 October 2026, 21:49 BST"
+    generated = now_uk.strftime("%A %d %B %Y, %H:%M %Z")
+    def row_html(h):
         nr = " <span class='nr'>NON-RUNNER</span>" if h["non_runner"] else ""
         price = esc(str(h["price"])) if h["price"] else "&ndash;"
-        rows += (
+        return (
             "<tr>"
-            f"<td class='t'>{esc(h['date'])}</td>"
             f"<td class='t'>{esc(h['time'])}</td>"
             f"<td class='course'>{esc(h['course'])} <span class='ctry'>{esc(h['country'])}</span></td>"
             f"<td class='horse'>{esc(h['horse'])}{nr}</td>"
@@ -155,13 +159,31 @@ def build_html(hits, countries, day_label):
         )
 
     if hits:
+        # Group hits by race day, preserving the chronological sort order.
+        groups = []  # list of (date_label, [hits])
+        for h in hits:
+            if groups and groups[-1][0] == h["date"]:
+                groups[-1][1].append(h)
+            else:
+                groups.append((h["date"], [h]))
+
+        blocks = ""
+        for date_label, day_hits in groups:
+            rows = "".join(row_html(h) for h in day_hits)
+            blocks += (
+                f"<h2 class='day'>{esc(date_label)} "
+                f"<span class='daycount'>{len(day_hits)} horse"
+                f"{'s' if len(day_hits) != 1 else ''}</span></h2>"
+                "<table><thead><tr>"
+                "<th>Time</th><th>Course</th><th>Horse</th>"
+                "<th>Trial</th><th>Price</th></tr></thead>"
+                f"<tbody>{rows}</tbody></table>"
+            )
+
         body = (
             f"<p class='count'>&#11088; {len(hits)} barrier-trial horse(s) "
             f"declared to run ({esc(day_label)})</p>"
-            "<table><thead><tr>"
-            "<th>Date</th><th>Time</th><th>Course</th><th>Horse</th>"
-            "<th>Trial</th><th>Price</th></tr></thead>"
-            f"<tbody>{rows}</tbody></table>"
+            + blocks
         )
     else:
         body = (f"<p class='none'>No barrier-trial horses are declared to run "
@@ -183,6 +205,9 @@ def build_html(hits, countries, day_label):
   header p {{ margin:4px 0 0; font-size:13px; color:#0a3f5c; }}
   main {{ padding:16px 20px 40px; }}
   .count {{ font-size:16px; font-weight:700; margin:6px 0 14px; }}
+  h2.day {{ font-size:15px; margin:22px 0 8px; color:#063047;
+            border-bottom:2px solid var(--blue); padding-bottom:6px; }}
+  h2.day .daycount {{ font-weight:400; color:var(--muted); font-size:13px; }}
   .none {{ font-size:16px; color:var(--muted); background:#fff; border:1px solid var(--line);
           border-radius:10px; padding:18px; }}
   table {{ width:100%; border-collapse:collapse; background:#fff;
@@ -207,7 +232,7 @@ def build_html(hits, countries, day_label):
   {body}
 </main>
 <footer>
-  Updated {esc(generated)} (UK time) &middot; scanning {esc('/'.join(countries))} &middot;
+  Updated {esc(generated)} &middot; scanning {esc('/'.join(countries))} &middot;
   prices &amp; cards from the Ladbrokes feed. Matching is by exact horse name.
 </footer>
 </body>
