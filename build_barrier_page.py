@@ -37,6 +37,28 @@ def _log(msg):
     print(msg, flush=True)
 
 
+def _ordinal(pos: str) -> str:
+    """Turn a trial finishing position into readable text.
+
+    "2"   -> "finished 2nd"
+    "1"   -> "finished 1st"
+    "N/R" -> "non-runner in trial"
+    ""    -> "" (unknown)
+    """
+    pos = (pos or "").strip()
+    if not pos:
+        return ""
+    if not pos.isdigit():
+        # e.g. "N/R" (didn't run in the trial)
+        return "non-runner in trial"
+    n = int(pos)
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"finished {n}{suffix}"
+
+
 def _norm(name: str) -> str:
     """Normalise a horse name for exact matching (case/punctuation-insensitive)."""
     s = name.strip().lower()
@@ -153,7 +175,7 @@ def build_html(hits, countries, day_label):
             f"<td class='t'>{esc(h['time'])}</td>"
             f"<td class='course'>{esc(h['course'])} <span class='ctry'>{esc(h['country'])}</span></td>"
             f"<td class='horse'>{esc(h['horse'])}{nr}</td>"
-            f"<td class='t'>Batch {esc(h['trial_batch'])}, pos {esc(h['trial_pos'])}</td>"
+            f"<td class='t'>Batch {esc(h['trial_batch'])}, {esc(_ordinal(h['trial_pos']))}</td>"
             f"<td class='num'>{price}</td>"
             "</tr>\n"
         )
@@ -174,7 +196,12 @@ def build_html(hits, countries, day_label):
                 f"<h2 class='day'>{esc(date_label)} "
                 f"<span class='daycount'>{len(day_hits)} horse"
                 f"{'s' if len(day_hits) != 1 else ''}</span></h2>"
-                "<table><thead><tr>"
+                "<table>"
+                "<colgroup>"
+                "<col class='c-time'><col class='c-course'><col class='c-horse'>"
+                "<col class='c-trial'><col class='c-price'>"
+                "</colgroup>"
+                "<thead><tr>"
                 "<th>Time</th><th>Course</th><th>Horse</th>"
                 "<th>Trial</th><th>Price</th></tr></thead>"
                 f"<tbody>{rows}</tbody></table>"
@@ -211,8 +238,18 @@ def build_html(hits, countries, day_label):
   .none {{ font-size:16px; color:var(--muted); background:#fff; border:1px solid var(--line);
           border-radius:10px; padding:18px; }}
   table {{ width:100%; border-collapse:collapse; background:#fff;
-          border:1px solid var(--line); border-radius:10px; overflow:hidden; }}
-  th,td {{ text-align:left; padding:10px 12px; font-size:14px; border-bottom:1px solid var(--line); }}
+          border:1px solid var(--line); border-radius:10px; overflow:hidden;
+          table-layout:fixed; }}
+  th,td {{ text-align:left; padding:10px 12px; font-size:14px;
+          border-bottom:1px solid var(--line);
+          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+  /* Fixed column widths so every day's table lines up identically. */
+  col.c-time  {{ width:14%; }}
+  col.c-course{{ width:26%; }}
+  col.c-horse {{ width:26%; }}
+  col.c-trial {{ width:22%; }}
+  col.c-price {{ width:12%; }}
+  td.horse, td.course {{ white-space:normal; }}
   th {{ background:#f8fafc; color:var(--muted); font-weight:600; }}
   tr:last-child td {{ border-bottom:none; }}
   td.horse {{ font-weight:700; }}
