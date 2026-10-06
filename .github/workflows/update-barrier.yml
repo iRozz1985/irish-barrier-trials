@@ -26,7 +26,7 @@ jobs:
       - name: Build the results page
         env:
           LADS_API_KEY: ${{ secrets.LADS_API_KEY }}
-        run: python build_barrier_page.py --day today
+        run: python build_barrier_page.py --day all
 
       - name: Commit and push the updated page
         run: |
